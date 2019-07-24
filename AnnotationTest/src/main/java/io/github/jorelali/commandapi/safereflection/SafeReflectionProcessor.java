@@ -5,11 +5,9 @@ import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLClassLoader;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Enumeration;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
@@ -30,13 +28,11 @@ import com.google.auto.service.AutoService;
 public class SafeReflectionProcessor extends AbstractProcessor {
 
 	private Messager messager;
-	private List<String> errorReport;
 
 	@Override
 	public synchronized void init(ProcessingEnvironment processingEnv) {
 		super.init(processingEnv);
 		messager = processingEnv.getMessager();
-		errorReport = new ArrayList<>();
 	}
 
 	@Override
@@ -65,12 +61,6 @@ public class SafeReflectionProcessor extends AbstractProcessor {
 				processSafeReflection(safeReflection);
 			});
 		});
-		
-		//Print error report
-		if(!errorReport.isEmpty()) {
-			errorReport.stream().forEach(str -> print(str));
-			messager.printMessage(Kind.ERROR, "Errors were found... halting compilation");
-		}
 		return true;
 	}
 	
@@ -83,7 +73,7 @@ public class SafeReflectionProcessor extends AbstractProcessor {
 		if(!safeReflection.field().equals("")) {
 			for(String version : safeReflection.versions()) {
 				if(!checkValidField(version, safeReflection.field(), targetName)) {
-					errorReport.add("Could not find field '" + safeReflection.field() + "' in class " + targetName + " for version " + version);
+					error("Could not find field '" + safeReflection.field() + "' in class " + targetName + " for version " + version);
 				}
 			}
 			return;
@@ -93,13 +83,13 @@ public class SafeReflectionProcessor extends AbstractProcessor {
 		if(!safeReflection.method().equals("")) {
 			for(String version : safeReflection.versions()) {
 				if(!checkValidMethod(version, safeReflection.method(), targetName)) {
-					errorReport.add("Could not find method '" + safeReflection.method() + "' in class " + targetName + " for version " + version);
+					error("Could not find method '" + safeReflection.method() + "' in class " + targetName + " for version " + version);
 				}
 			}
 			return;
 		}
 
-		messager.printMessage(Kind.ERROR, "Invalid SafeReflection field/method field");
+		error("Invalid SafeReflection field/method field");
 	}
 	
 	private String getTargetName(SafeReflection safeReflection) {
@@ -117,8 +107,8 @@ public class SafeReflectionProcessor extends AbstractProcessor {
 		JarFile jarFile = null;
 		try {
 			jarFile = new JarFile(spigot);
-		} catch (IOException e1) {
-			e1.printStackTrace();
+		} catch (IOException e) {
+			e.printStackTrace();
 		}
 		
 		try {
@@ -150,7 +140,7 @@ public class SafeReflectionProcessor extends AbstractProcessor {
 	}
 	
 	//false if it goes wrong
-	public boolean checkValidField(String version, String fieldName, String target) {
+	private boolean checkValidField(String version, String fieldName, String target) {
 		Class<?> targetClass = getClass(target, version);
 		try {
 			targetClass.getDeclaredField(fieldName);
@@ -160,7 +150,7 @@ public class SafeReflectionProcessor extends AbstractProcessor {
 		return true;
 	}
 	
-	public boolean checkValidMethod(String version, String methodName, String target) {
+	private boolean checkValidMethod(String version, String methodName, String target) {
 		Class<?> targetClass = getClass(target, version);
 		try {
 			targetClass.getDeclaredMethod(methodName);
@@ -170,8 +160,8 @@ public class SafeReflectionProcessor extends AbstractProcessor {
 		return true;
 	}
 	
-	public void print(String str) {
-		messager.printMessage(Kind.MANDATORY_WARNING, str);
+	private void error(String str) {
+		messager.printMessage(Kind.ERROR, str);
 	}
 
 }
