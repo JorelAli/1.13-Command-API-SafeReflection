@@ -1,4 +1,4 @@
-package io.github.jorelali.annotationtest;
+package io.github.jorelali.commandapi.safereflection;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -19,7 +19,7 @@ import javax.tools.Diagnostic.Kind;
 import com.google.auto.service.AutoService;
 
 @AutoService(Processor.class)
-public class MyProcessor extends AbstractProcessor {
+public class SafeReflectionProcessor extends AbstractProcessor {
 
 	private Messager messager;
 	private List<String> errorReport;

@@ -1,4 +1,4 @@
-package io.github.jorelali.annotationtest;
+package io.github.jorelali.commandapi.safereflection;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
