@@ -2,7 +2,7 @@ package io.github.jorelali.commandapi.safereflection;
 
 import java.io.File;
 import java.io.IOException;
-import java.net.JarURLConnection;
+import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.util.ArrayList;
@@ -77,17 +77,29 @@ public class SafeReflectionProcessor extends AbstractProcessor {
 	private File root = new File(".");
 	
 	private void processSafeReflection(SafeReflection safeReflection) {
+		String targetName = getTargetName(safeReflection);
+		
+		//Handle fields
 		if(!safeReflection.field().equals("")) {
 			for(String version : safeReflection.versions()) {
-				checkValidField(version, safeReflection.field(), getTargetName(safeReflection));
+				if(!checkValidField(version, safeReflection.field(), targetName)) {
+					errorReport.add("Could not find field '" + safeReflection.field() + "' in class " + targetName + " for version " + version);
+				}
 			}
-		} else if(!safeReflection.method().equals("")) {
+			return;
+		} 
+
+		//Handle methods
+		if(!safeReflection.method().equals("")) {
 			for(String version : safeReflection.versions()) {
-				checkValidMethod(version, safeReflection.method(), getTargetName(safeReflection));
+				if(!checkValidMethod(version, safeReflection.method(), targetName)) {
+					errorReport.add("Could not find method '" + safeReflection.method() + "' in class " + targetName + " for version " + version);
+				}
 			}
-		} else {
-			messager.printMessage(Kind.ERROR, "Invalid SafeReflection field/method field");
+			return;
 		}
+
+		messager.printMessage(Kind.ERROR, "Invalid SafeReflection field/method field");
 	}
 	
 	private String getTargetName(SafeReflection safeReflection) {
@@ -99,70 +111,63 @@ public class SafeReflectionProcessor extends AbstractProcessor {
 		return null;
 	}
 	
-	public Class<?> getClass(String target, String version) throws IOException, ClassNotFoundException {
-		
+	private Class<?> getClass(String target, String version) {
 		//Load the file
 		File spigot = new File(root, "spigotlibs/spigot-" + version + ".jar");
-		JarFile jarFile = new JarFile(spigot);
-		Enumeration<JarEntry> e = jarFile.entries();
-
-		//Load the classloader for the file
-		URL[] urls = { new URL("jar:file:" + spigot + "!/") };
-		URLClassLoader cl = URLClassLoader.newInstance(urls);
-
-		String targetClass = target.replace(".", "/") + ".class";		
-		boolean found = false;
-		
-		while (e.hasMoreElements()) {
-		    JarEntry entry = e.nextElement();
-		    
-		    if(entry.getName().equals(targetClass)) {
-		    	found = true;
-		    	//print(entry.getName());
-		    	Arrays.stream(cl.loadClass(target).getDeclaredMethods()).forEach(o -> {
-		    		print(o.getName());
-		    	});
-		    	break;
-		    }
-		    
-//		    if(entry.isDirectory() && index != directories.length - 1) {
-//		    	//traverse deeper
-//		    	//entry.
-//		    }
-//		    
-//		    if(entry.isDirectory() || !entry.getName().endsWith(".class")){
-//		        continue;
-//		    }
-//		    // -6 because of .class
-//		    String className = entry.getName().substring(0,entry.getName().length()-6);
-//		    className = className.replace('/', '.');
-//		    Class c = cl.loadClass(className);
-
+		JarFile jarFile = null;
+		try {
+			jarFile = new JarFile(spigot);
+		} catch (IOException e1) {
+			e1.printStackTrace();
 		}
 		
-		jarFile.close();
+		try {
+			Enumeration<JarEntry> entries = jarFile.entries();
+
+			//Load the classloader for the file
+			URL[] urls = { new URL("jar:file:" + spigot + "!/") };
+			URLClassLoader cl = URLClassLoader.newInstance(urls);
+
+			//Find the target we're looking for
+			String targetClass = target.replace(".", "/") + ".class";		
+			
+			//Find the class we're looking for
+			while (entries.hasMoreElements()) {
+				if(entries.nextElement().getName().equals(targetClass)) {
+			    	return cl.loadClass(target);
+			    }
+			}
+		} catch (MalformedURLException | ClassNotFoundException e) {
+			e.printStackTrace();
+		} finally {
+			try {
+				jarFile.close();
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+		}
 		return null;
 	}
 	
 	//false if it goes wrong
 	public boolean checkValidField(String version, String fieldName, String target) {
+		Class<?> targetClass = getClass(target, version);
 		try {
-			getClass(target, version);
-		} catch (ClassNotFoundException | IOException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
+			targetClass.getDeclaredField(fieldName);
+		} catch (NoSuchFieldException e) {
+			return false;
 		}
-		return false;
+		return true;
 	}
 	
 	public boolean checkValidMethod(String version, String methodName, String target) {
+		Class<?> targetClass = getClass(target, version);
 		try {
-			getClass(target, version);
-		} catch (ClassNotFoundException | IOException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
+			targetClass.getDeclaredMethod(methodName);
+		} catch (NoSuchMethodException e) {
+			return false;
 		}
-		return false;
+		return true;
 	}
 	
 	public void print(String str) {
