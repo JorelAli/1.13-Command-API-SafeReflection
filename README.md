@@ -1,4 +1,4 @@
-# 1.13-Command-API-SafeReflections
+# 1.13-Command-API-SafeReflection
 
 An annotation processing system for the [1.13 CommandAPI](https://github.com/JorelAli/1.13-Command-API). Used to add extra compiler checks to ensure that reflection calls to methods and fields are safer.
 
@@ -10,9 +10,9 @@ The current form of checking is to manually go through the libraries for 1.13 an
 
 SafeReflections checks it all for you at compile time and throws an error if it determines that a specific field or method name doesn't exist.
 
-## Using SafeReflections
+## Using SafeReflection
 
-SafeReflections is designed only to work for maven projects that build on [Spigot](https://www.spigotmc.org/) _(i.e. Spigot plugins)_. 
+SafeReflection is designed only to work for maven projects that build on [Spigot](https://www.spigotmc.org/) _(i.e. Spigot plugins)_. 
 
 ### Directory setup
 
