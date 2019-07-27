@@ -37,7 +37,7 @@ Add the dependency:
 <dependency>
     <groupId>io.github.jorelali</groupId>
     <artifactId>commandapi-safereflection</artifactId>
-    <version>1.0</version>
+    <version>2.0</version>
 </dependency>
 ```
 
@@ -65,21 +65,32 @@ Add the annotation processor to your compiler setup:
 SafeReflections must be declared at the top of your class where you plan to use reflection. Then the general format is as follows:
 
 ```java
-@SafeReflection(target = YourClass.class, method = "someMethod", versions = {"1.14", "1.14.1"})
-@SafeReflection(target = AnotherClass.class, field = "someField", versions = "1.13.2")
+@SafeReflection(type = ReflectionType.METHOD, target = YourClass.class, name = "someMethod", methodArgs = String.class, versions = {"1.14", "1.14.1"})
+@SafeReflection(type = ReflectionType.FIELD, target = AnotherClass.class, name = "someField", versions = "1.13.2")
 public Class MyClass {
+    //...
+    
+    //Accessing the field
+    AnotherClass.class.getDeclaredField("someField");
+    
+    //...
+    
+    //Accessing the method
+    YourClass.class.getDeclaredMethod("someMethod").invoke(null, "hello");
+    
     //...
 }
 ```
 
 The annotation can take the following fields:
 
-| SafeReflection field |                  values                 | Required? |
-|:--------------------:|:---------------------------------------:|:---------:|
-|       `target`       |  A Class where reflection is to be used |    yes    |
-|       `method`       | A String of the method name to retrieve |     no    |
-|        `field`       |  A String of the field name to retrieve |     no    |
-|      `versions`      |     A String[] of Minecraft versions    |    yes    |
+| SafeReflection field |                                                 values                                                | Required? |
+|:--------------------:|:-----------------------------------------------------------------------------------------------------:|:---------:|
+|       `target`       |                                 A Class where reflection is to be used                                |    yes    |
+|        `name`        |                             A String of the method/field name to retrieve                             |    yes    |
+|        `type`        | A `ReflectionType` of element to retrieve  (either `ReflectionType.FIELD` or `ReflectionType.METHOD`) |    yes    |
+|      `versions`      |                                    A String[] of Minecraft versions                                   |    yes    |
+|     `methodArgs`     |                                   A Class[] of method argument types                                  |     no    |
 
 ## Real life examples
 
