@@ -3,6 +3,7 @@ package io.github.jorelali.commandapi.safereflection;
 import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLClassLoader;
@@ -21,6 +22,8 @@ import javax.annotation.processing.RoundEnvironment;
 import javax.lang.model.SourceVersion;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.type.MirroredTypeException;
+import javax.lang.model.type.MirroredTypesException;
+import javax.lang.model.type.TypeMirror;
 import javax.tools.Diagnostic.Kind;
 
 import com.google.auto.service.AutoService;
@@ -88,11 +91,13 @@ public class SafeReflectionProcessor extends AbstractProcessor {
 				}
 				return;
 			case METHOD:
-//				for(String version : safeReflection.versions()) {
+				for(String version : safeReflection.versions()) {
+					MethodResult result = checkValidMethod(safeReflection, version);
+					
 //					if(!checkValidMethod(version, safeReflection.method(), targetName)) {
 //						error("Could not find method '" + safeReflection.method() + "' in class " + targetName + " for version " + version);
 //					}
-//				}
+				}
 				return;
 		}
 	}
@@ -116,14 +121,33 @@ public class SafeReflectionProcessor extends AbstractProcessor {
 		return new FieldResult();
 	}
 	
-	private boolean checkValidMethod(String version, String methodName, String target) {
-		Class<?> targetClass = searchSpigotClass(target, version);
+	private MethodResult checkValidMethod(SafeReflection safeReflection, String version) {
+		String target = getTargetName(safeReflection);
+		
 		try {
-			targetClass.getDeclaredMethod(methodName);
+			//Check existance
+			Method method = searchSpigotClass(target, version).getDeclaredMethod(safeReflection.name());
+			
+			//Check return type
+			String returnType = getReturnType(safeReflection);
+			String expectedReturnType = method.getReturnType().getCanonicalName();
+			if(!expectedReturnType.equals(returnType)) {
+				error("Bad method return type");
+				return null; //new FieldResult(safeReflection.name(), returnType, expectedReturnType, target);
+			}
+			
+			String[] methodArgs = getMethodArgs(safeReflection);
+			String[] expectedMethodArgs = Arrays.stream(method.getParameterTypes()).map(Class::getCanonicalName).toArray(String[]::new);
+			if(!Arrays.equals(methodArgs, expectedMethodArgs)) {
+				error("Method results aren't equal! - Expected: " + Arrays.toString(expectedMethodArgs) + ", but got: " + Arrays.toString(methodArgs));
+				return null;
+			}
+			
 		} catch (NoSuchMethodException e) {
-			return false;
+			error("method not found");
+			return null;
 		}
-		return true;
+		return new MethodResult();
 	}
 	
 	private String getTargetName(SafeReflection safeReflection) {
@@ -140,6 +164,15 @@ public class SafeReflectionProcessor extends AbstractProcessor {
 			safeReflection.returnType();
 		} catch(MirroredTypeException e) {
 			return e.getTypeMirror().toString();
+		}
+		return null;
+	}
+	
+	private String[] getMethodArgs(SafeReflection safeReflection) {
+		try {
+			safeReflection.methodArgs();
+		} catch(MirroredTypesException e) {
+			return e.getTypeMirrors().stream().map(TypeMirror::toString).toArray(String[]::new);
 		}
 		return null;
 	}
