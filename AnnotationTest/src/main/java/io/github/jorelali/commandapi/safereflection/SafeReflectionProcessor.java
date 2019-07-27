@@ -2,6 +2,7 @@ package io.github.jorelali.commandapi.safereflection;
 
 import java.io.File;
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLClassLoader;
@@ -69,27 +70,60 @@ public class SafeReflectionProcessor extends AbstractProcessor {
 	private void processSafeReflection(SafeReflection safeReflection) {
 		String targetName = getTargetName(safeReflection);
 		
-		//Handle fields
-		if(!safeReflection.field().equals("")) {
-			for(String version : safeReflection.versions()) {
-				if(!checkValidField(version, safeReflection.field(), targetName)) {
-					error("Could not find field '" + safeReflection.field() + "' in class " + targetName + " for version " + version);
+		switch(safeReflection.type()) {
+			case FIELD:
+				for(String version : safeReflection.versions()) {
+					FieldResult result = checkValidField(safeReflection, version);
+					switch(result.getResult()) {
+						case GOOD:
+							break;
+						case NOT_FOUND:
+							error(result.getClassName() + "." + result.getExpectedFieldName() + " was not found for version " + version);
+							break;
+						case WRONG_TYPE:
+							error(result.getExpectedFieldType() + " " + result.getClassName() + "." + result.getExpectedFieldName() + 
+									" was not found for version " + version + ". Instead, found field called " + result.getActualFieldType());
+							break;
+					}
 				}
-			}
-			return;
-		} 
-
-		//Handle methods
-		if(!safeReflection.method().equals("")) {
-			for(String version : safeReflection.versions()) {
-				if(!checkValidMethod(version, safeReflection.method(), targetName)) {
-					error("Could not find method '" + safeReflection.method() + "' in class " + targetName + " for version " + version);
-				}
-			}
-			return;
+				return;
+			case METHOD:
+//				for(String version : safeReflection.versions()) {
+//					if(!checkValidMethod(version, safeReflection.method(), targetName)) {
+//						error("Could not find method '" + safeReflection.method() + "' in class " + targetName + " for version " + version);
+//					}
+//				}
+				return;
 		}
-
-		error("Invalid SafeReflection field/method field");
+	}
+	
+	//false if it goes wrong
+	private FieldResult checkValidField(SafeReflection safeReflection, String version) {
+		String target = getTargetName(safeReflection);
+		try {
+			//Check field existance
+			Field field = searchSpigotClass(target, version).getDeclaredField(safeReflection.name());
+			
+			//Check field type
+			String returnType = getReturnType(safeReflection);
+			String expectedType = field.getType().getCanonicalName();
+			if(!expectedType.equals(returnType)) {
+				return new FieldResult(safeReflection.name(), returnType, expectedType, target);
+			}
+		} catch (NoSuchFieldException e) {
+			return new FieldResult(safeReflection.name(), target);
+		}
+		return new FieldResult();
+	}
+	
+	private boolean checkValidMethod(String version, String methodName, String target) {
+		Class<?> targetClass = searchSpigotClass(target, version);
+		try {
+			targetClass.getDeclaredMethod(methodName);
+		} catch (NoSuchMethodException e) {
+			return false;
+		}
+		return true;
 	}
 	
 	private String getTargetName(SafeReflection safeReflection) {
@@ -101,7 +135,16 @@ public class SafeReflectionProcessor extends AbstractProcessor {
 		return null;
 	}
 	
-	private Class<?> getClass(String target, String version) {
+	private String getReturnType(SafeReflection safeReflection) {
+		try {
+			safeReflection.returnType();
+		} catch(MirroredTypeException e) {
+			return e.getTypeMirror().toString();
+		}
+		return null;
+	}
+	
+	private Class<?> searchSpigotClass(String target, String version) {
 		//Load the file
 		File spigot = new File(root, "spigotlibs/spigot-" + version + ".jar");
 		JarFile jarFile = null;
@@ -137,27 +180,6 @@ public class SafeReflectionProcessor extends AbstractProcessor {
 			}
 		}
 		return null;
-	}
-	
-	//false if it goes wrong
-	private boolean checkValidField(String version, String fieldName, String target) {
-		Class<?> targetClass = getClass(target, version);
-		try {
-			targetClass.getDeclaredField(fieldName);
-		} catch (NoSuchFieldException e) {
-			return false;
-		}
-		return true;
-	}
-	
-	private boolean checkValidMethod(String version, String methodName, String target) {
-		Class<?> targetClass = getClass(target, version);
-		try {
-			targetClass.getDeclaredMethod(methodName);
-		} catch (NoSuchMethodException e) {
-			return false;
-		}
-		return true;
 	}
 	
 	private void error(String str) {
