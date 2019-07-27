@@ -86,6 +86,7 @@ public class SafeReflectionProcessor extends AbstractProcessor {
 									" was not found for version " + version + ". Instead, found field returning " + result.getActualFieldType());
 							break;
 					}
+					break;
 				}
 				case METHOD: {
 					MethodResult result = checkValidMethod(safeReflection, version);
@@ -104,8 +105,8 @@ public class SafeReflectionProcessor extends AbstractProcessor {
 									"(" + arrToStr(result.getExpectedMethodArgs()) +  ") was not found for version " + version + 
 									". Instead, found method with arguments as " + arrToStr(result.getActualMethodArgs()));
 							break;
-						
 					}
+					break;
 				}
 			}
 		}
