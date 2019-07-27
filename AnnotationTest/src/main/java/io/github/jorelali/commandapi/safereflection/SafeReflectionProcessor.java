@@ -2,6 +2,8 @@ package io.github.jorelali.commandapi.safereflection;
 
 import java.io.File;
 import java.io.IOException;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLClassLoader;
@@ -20,6 +22,8 @@ import javax.annotation.processing.RoundEnvironment;
 import javax.lang.model.SourceVersion;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.type.MirroredTypeException;
+import javax.lang.model.type.MirroredTypesException;
+import javax.lang.model.type.TypeMirror;
 import javax.tools.Diagnostic.Kind;
 
 import com.google.auto.service.AutoService;
@@ -66,30 +70,97 @@ public class SafeReflectionProcessor extends AbstractProcessor {
 	
 	private File root = new File(".");
 	
-	private void processSafeReflection(SafeReflection safeReflection) {
-		String targetName = getTargetName(safeReflection);
-		
-		//Handle fields
-		if(!safeReflection.field().equals("")) {
-			for(String version : safeReflection.versions()) {
-				if(!checkValidField(version, safeReflection.field(), targetName)) {
-					error("Could not find field '" + safeReflection.field() + "' in class " + targetName + " for version " + version);
+	private void processSafeReflection(SafeReflection safeReflection) {		
+		for(String version : safeReflection.versions()) {
+			switch(safeReflection.type()) {
+				case FIELD: {
+					FieldResult result = checkValidField(safeReflection, version);
+					switch(result.getResult()) {
+						case GOOD:
+							break;
+						case NOT_FOUND:
+							error("Field " + result.getClassName() + "." + result.getExpectedFieldName() + " was not found for version " + version);
+							break;
+						case WRONG_TYPE:
+							error("Field " + result.getExpectedFieldType() + " " + result.getClassName() + "." + result.getExpectedFieldName() + 
+									" was not found for version " + version + ". Instead, found field returning " + result.getActualFieldType());
+							break;
+					}
+					break;
+				}
+				case METHOD: {
+					MethodResult result = checkValidMethod(safeReflection, version);
+					switch(result.getResult()) {
+						case GOOD:
+							break;
+						case NOT_FOUND:
+							error("Method " + result.getClassName() + "." + result.getExpectedMethodName() + "() was not found for version " + version);
+							break;
+						case WRONG_RETURN_TYPE:
+							error("Method " + result.getExpectedMethodReturnType() + " " + result.getClassName() + "." + result.getExpectedMethodName() + 
+									"() was not found for version " + version + ". Instead, found method returning " + result.getActualMethodReturnType());
+							break;
+						case WRONG_ARGS:
+							error("Method " + result.getExpectedMethodReturnType() + " " + result.getClassName() + "." + result.getExpectedMethodName() + 
+									"(" + arrToStr(result.getExpectedMethodArgs()) +  ") was not found for version " + version + 
+									". Instead, found method with arguments as " + arrToStr(result.getActualMethodArgs()));
+							break;
+					}
+					break;
 				}
 			}
-			return;
-		} 
-
-		//Handle methods
-		if(!safeReflection.method().equals("")) {
-			for(String version : safeReflection.versions()) {
-				if(!checkValidMethod(version, safeReflection.method(), targetName)) {
-					error("Could not find method '" + safeReflection.method() + "' in class " + targetName + " for version " + version);
-				}
-			}
-			return;
 		}
-
-		error("Invalid SafeReflection field/method field");
+	}
+	
+	private String arrToStr(String[] arr) {
+		String arrStr = Arrays.toString(arr);
+		return arrStr.substring(1, arrStr.length() - 1);
+	}
+	
+	//false if it goes wrong
+	private FieldResult checkValidField(SafeReflection safeReflection, String version) {
+		String target = getTargetName(safeReflection);
+		try {
+			//Check field existance
+			Field field = searchSpigotClass(target, version).getDeclaredField(safeReflection.name());
+			
+			//Check field type
+			String providedReturnType = getReturnType(safeReflection);
+			String actualReturnType = field.getType().getCanonicalName();
+			if(!actualReturnType.equals(providedReturnType)) {
+				return new FieldResult(safeReflection.name(), providedReturnType, actualReturnType, target);
+			}
+		} catch (NoSuchFieldException e) {
+			return new FieldResult(safeReflection.name(), target);
+		}
+		return new FieldResult();
+	}
+	
+	private MethodResult checkValidMethod(SafeReflection safeReflection, String version) {
+		String target = getTargetName(safeReflection);
+		
+		try {
+			//Check existance
+			Method method = searchSpigotClass(target, version).getDeclaredMethod(safeReflection.name());
+			
+			//Check return type
+			String providedReturnType = getReturnType(safeReflection);
+			String actualReturnType = method.getReturnType().getCanonicalName();
+			if(!actualReturnType.equals(providedReturnType)) {
+				new MethodResult(safeReflection.name(), providedReturnType, actualReturnType, target);
+			}
+			
+			//Check method args
+			String[] providedMethodArgs = getMethodArgs(safeReflection);
+			String[] actualMethodArgs = Arrays.stream(method.getParameterTypes()).map(Class::getCanonicalName).toArray(String[]::new);
+			if(!Arrays.equals(providedMethodArgs, actualMethodArgs)) {
+				return new MethodResult(safeReflection.name(), providedReturnType, actualReturnType, providedMethodArgs, actualMethodArgs, target);
+			}
+			
+		} catch (NoSuchMethodException e) {
+			return new MethodResult(safeReflection.name(), target);
+		}
+		return new MethodResult();
 	}
 	
 	private String getTargetName(SafeReflection safeReflection) {
@@ -101,7 +172,25 @@ public class SafeReflectionProcessor extends AbstractProcessor {
 		return null;
 	}
 	
-	private Class<?> getClass(String target, String version) {
+	private String getReturnType(SafeReflection safeReflection) {
+		try {
+			safeReflection.returnType();
+		} catch(MirroredTypeException e) {
+			return e.getTypeMirror().toString();
+		}
+		return null;
+	}
+	
+	private String[] getMethodArgs(SafeReflection safeReflection) {
+		try {
+			safeReflection.methodArgs();
+		} catch(MirroredTypesException e) {
+			return e.getTypeMirrors().stream().map(TypeMirror::toString).toArray(String[]::new);
+		}
+		return null;
+	}
+	
+	private Class<?> searchSpigotClass(String target, String version) {
 		//Load the file
 		File spigot = new File(root, "spigotlibs/spigot-" + version + ".jar");
 		JarFile jarFile = null;
@@ -137,27 +226,6 @@ public class SafeReflectionProcessor extends AbstractProcessor {
 			}
 		}
 		return null;
-	}
-	
-	//false if it goes wrong
-	private boolean checkValidField(String version, String fieldName, String target) {
-		Class<?> targetClass = getClass(target, version);
-		try {
-			targetClass.getDeclaredField(fieldName);
-		} catch (NoSuchFieldException e) {
-			return false;
-		}
-		return true;
-	}
-	
-	private boolean checkValidMethod(String version, String methodName, String target) {
-		Class<?> targetClass = getClass(target, version);
-		try {
-			targetClass.getDeclaredMethod(methodName);
-		} catch (NoSuchMethodException e) {
-			return false;
-		}
-		return true;
 	}
 	
 	private void error(String str) {

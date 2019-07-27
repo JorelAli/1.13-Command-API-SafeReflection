@@ -11,9 +11,34 @@ import java.lang.annotation.Target;
 @Repeatable(SafeReflections.class)
 public @interface SafeReflection {
 
-	String[] versions();
-	Class<?> target();
-	String field() default "";
-	String method() default "";
+	/**
+	 * An array of versions to check
+	 */
+	String[] versions();   //e.g. {"1.13", "1.13.1"}
+	
+	/**
+	 * The target class where a method/field is declared
+	 */
+	Class<?> target();     //e.g. MinecraftServer.class
+	
+	/**
+	 * The type to check, either ReflectionType.FIELD or ReflectionType.METHOD
+	 */
+	ReflectionType type(); //e.g. FIELD
+	
+	/**
+	 * The name of the field/method 
+	 */
+	String name();         //e.g. "a"
+	
+	/**
+	 * The return type for a method, or the type of the field
+	 */
+	Class<?> returnType(); //e.g. String.class
+	
+	/**
+	 * Arguments for methods
+	 */
+	Class<?>[] methodArgs() default {};
 	
 }
